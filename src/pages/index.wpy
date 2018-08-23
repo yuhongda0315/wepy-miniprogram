@@ -1,0 +1,196 @@
+<style>
+.rong-main {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 100%;
+}
+.rong-messages {
+  position: absolute;
+  top: 0;
+  bottom: 100rpx;
+  width: 100%;
+}
+.rong-message {
+  max-width: 80%;
+  min-height: 70rpx;
+  background-color: #141c2b;
+  color: #fff;
+  margin: 20rpx 10rpx;
+  display: table;
+  border-radius: 10rpx;
+  padding: 10rpx 10rpx 3rpx 10rpx;
+}
+.rong-editor {
+  position: absolute;
+  bottom: 0;
+  width: 100%;
+  height: 100rpx;
+  border-top: 1px solid #ccc;
+}
+.rong-editor-input {
+  box-sizing: border-box;
+  margin: 10rpx;
+  line-height: 60rpx;
+  height: 80rpx;
+}
+</style>
+<template>
+  <view class="rong-main"  style='bottom: {{keyboradHeight}}px;'>
+    <scroll-view class="rong-messages" scroll-y scroll-into-view="r-{{toView}}">
+      <view class="rong-message" wx:for="{{messages}}" wx:key="{{message.messageUId}}" wx:for-item="message" id="r-{{message.messageUId}}">{{message.content.content}}</view>
+    </scroll-view>
+    <view class="rong-editor">
+      <input class='rong-editor-input' 
+        adjust-position='{{false}}' 
+        value='{{content}}'
+        bindfocus='onFocus' 
+        bindinput='onInput'
+        confirm-type='send' 
+        bindconfirm='sendText'/>
+    </view>
+  </view>
+</template>
+
+<script>
+import wepy from 'wepy'
+import RongIMLib from './RongIMLib.miniprogram-1.0.6.js'
+
+let RongIM = null
+let conversationType = 1
+let targetId = 'tester'
+
+let getHistoryMessages = function() {
+  let timestamp = null
+  let count = 20
+  return new Promise((resolve, reject) => {
+    RongIM.getHistoryMessages(conversationType, targetId, timestamp, count, {
+      onSuccess: function(messages) {
+        resolve(messages)
+      },
+      onError: function(code) {
+        console.log('getHistoryMessages error: ', code)
+        reject(code)
+      }
+    })
+  })
+}
+
+export default class Index extends wepy.page {
+  config = {
+    navigationBarTitleText: 'RongCloud'
+  };
+
+  data = {
+    content: '',
+    keyboradHeight: 0,
+    messages: [],
+    toView: ''
+  };
+
+  update(data) {
+    for (var key in data) {
+      let value = data[key]
+      this[key] = value
+    }
+    this.$apply()
+  }
+
+  methods = {
+    onInput: function(event) {
+      let { detail: { value } } = event
+      this.update({
+        content: value
+      })
+    },
+    onFocus: function(event) {
+      let { detail: { height } } = event
+      this.update({
+        keyboradHeight: height
+      })
+    },
+    onBlur: function() {
+      this.update({
+        keyboradHeight: 0
+      })
+    },
+    sendText: function() {
+      var that = this
+      let message = new RongIMLib.TextMessage({
+        content: that.content
+      })
+      that.update({
+        content: ''
+      })
+      RongIM.sendMessage(conversationType, targetId, message, {
+        onSuccess: function(message) {
+          that.messages.push(message)
+          that.update({
+            toView: message.messageUId
+          })
+        },
+        onError: function(code) {
+          console.log('SendMessage Error: ', code)
+        }
+      })
+    }
+  };
+
+  init() {
+    let that = this
+    let { RongIMClient } = RongIMLib
+    RongIMClient.init('8luwapkvucoil')
+    RongIMClient.setConnectionStatusListener({
+      onChanged: function (status) {
+        console.warn('connection:', status)
+      }
+    })
+    RongIMClient.setOnReceiveMessageListener({
+      onReceived: function (message) {
+        console.log('receive:', message)
+        let isText = (message.messageType === 'TextMessage')
+        if (isText) {
+          that.messages.push(message)
+          that.update({
+            toView: message.messageUId
+          })
+          that.$apply()
+        }
+      }
+    })
+    var token = 'pg7q1pETHWQl0Nz7W0W8IbrkPG6U/xPk3zvPIWf9le00WpXoGCi74EbkJ7Oe/osYVB/n79i50nhAwYX4wfWV8dMeJxvkYM6/urDldqnvJ/k='
+    RongIMClient.connect(token, {
+      onSuccess: function() {
+        console.log('connect successfully')
+        RongIM = RongIMClient.getInstance()
+        getHistoryMessages().then(messages => {
+          that.messages = messages
+          let lastestMsg = messages[messages.length - 1] || { messageUId: '' }
+          that.update({
+            toView: lastestMsg.messageUId
+          })
+        })
+      },
+      onTokenIncorrect: function() {
+        console.log('token 无效')
+      },
+      onError: function(code) {
+        console.log('connect error: ', code)
+      }
+    })
+  }
+
+  onLoad() {
+    console.log('load')
+  }
+
+  onShow() {
+    console.log('show')
+  }
+
+  onReady() {
+    console.log('ready')
+    this.init()
+  }
+}
+</script>
